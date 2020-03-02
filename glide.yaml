@@ -1,4 +1,4 @@
-package: github.com/Clever/moredis/moredis
+package: github.com/vanderson139/moredis/moredis
 import:
   - package: gopkg.in/yaml.v2
     ref:     53feefa2559fb8dfa8d81baad31be332c97d6c77

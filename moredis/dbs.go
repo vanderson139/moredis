@@ -77,6 +77,7 @@ type MongoIter interface {
 
 // RedisWriter is an interface for types that can write to redis using send/flush (pipelined operations)
 // The main purpose of breaking this out into an interface is for ease of mocking in tests.
+
 type RedisWriter interface {
 	Send(cmd string, args ...interface{}) error
 	Flush() error
@@ -86,6 +87,52 @@ type redisWriter struct {
 	conn          redis.Conn
 	flushInterval int
 	currentCount  int
+}
+
+type RedisReader interface {
+	GetKeys(cmd string, args ...interface{}) ([]string, error)
+	GetValue(key string) (string, error)
+}
+
+type redisReader struct {
+	conn          redis.Conn
+}
+
+func NewRedisReader(conn redis.Conn) RedisReader {
+	reader := &redisReader{
+		conn:          conn,
+	}
+	return reader
+}
+
+func (r *redisReader) GetKeys(cmd string, args ...interface{}) ([]string, error) {
+	results, err := redis.MultiBulk(r.conn.Do(cmd, args...))
+	if err != nil {
+		return nil, err
+	}
+
+	keys, err := redis.Strings(results[1], nil)
+
+	var redisKeys[]string
+
+	for _, key := range keys {
+		t, _ := redis.Int(r.conn.Do("TTL", key))
+
+		if t == -1 {
+			redisKeys = append(redisKeys, key)
+		}
+	}
+
+	return redisKeys, err
+}
+
+func (r *redisReader) GetValue(key string) (string, error) {
+	result, err := redis.String(r.conn.Do("GET", key))
+	if err != nil {
+		return "", err
+	}
+
+	return result, err
 }
 
 // NewRedisWriter creates a new RedisWriter.  We wrap redis.Conn here so that we can specify how many

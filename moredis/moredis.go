@@ -11,6 +11,11 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+type RedisKey struct {
+	Name  string
+	Value string
+}
+
 // Params holds the params the user passes in for substitution into config templates.
 type Params map[string]string
 
@@ -53,6 +58,68 @@ func BuildCache(cacheConfig Config, params Params, redisURL string, mongoURL str
 	if err := processCollections(cacheConfig, params, mongoDb, redisConn); err != nil {
 		return err
 	}
+	return nil
+}
+
+// BuildMongo builds a redis cache according to the passed in config.
+func BuildMongo(cacheConfig Config, redisURL string, mongoURL string, start int, end int) error {
+	fmt.Println("Populating database.")
+
+	// set up mongo/redis connections
+	mongoDb, redisConn, err := SetupDbs(mongoURL, redisURL)
+	if err != nil {
+		logger.Error("Failed to connect to dbs", err)
+		return err
+	}
+	defer mongoDb.Session.Close()
+	defer redisConn.Close()
+
+	if err := processKeys(cacheConfig, mongoDb, redisConn, start, end); err != nil {
+		return err
+	}
+	return nil
+}
+
+func processKeys(cacheConfig Config, mongoDb *mgo.Database, redisConn redis.Conn, start int, end int) error {
+
+	redisReader := NewRedisReader(redisConn)
+
+	var keys[]string
+	var err error
+
+	for _, collection := range cacheConfig.Collections {
+	    for _, rmap := range collection.Maps {
+            if end != 0 {
+                keys, err = redisReader.GetKeys("SCAN", start, "MATCH", rmap.Name, "COUNT", end)
+            } else {
+                keys, err = redisReader.GetKeys("SCAN", start, "MATCH", rmap.Name)
+            }
+
+            if err != nil {
+                logger.Error("Could not get KEYS", err)
+                return err
+            }
+
+            for _, key := range keys {
+
+                count, _ := mongoDb.C("redisKeys").Find(bson.M{"name": rmap.Key}).Count()
+
+                if count == 0 {
+                    value, _ := redisReader.GetValue(key)
+
+                    if err := mongoDb.C("redisKeys").Insert(RedisKey{rmap.Key, value}); err != nil {
+                        return err
+                    }
+
+                    logger.Info("Chave migrada", logger.M{"chave": key})
+                } else {
+                    logger.Info("Chave já existe", logger.M{"chave": key})
+                }
+            }
+        }
+	}
+
+	fmt.Println("Completed populating database")
 	return nil
 }
 

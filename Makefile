@@ -3,10 +3,10 @@ include golang.mk
 
 .PHONY: test $(PKGS) clean run install_deps
 SHELL := /bin/bash
-PKG = github.com/Clever/moredis/cmd/moredis
+PKG = github.com/vanderson139/moredis/cmd/moredis
 SUBPKGS := \
-github.com/Clever/moredis/moredis \
-github.com/Clever/moredis/logger
+github.com/vanderson139/moredis/moredis \
+github.com/vanderson139/moredis/logger
 PKGS = $(PKG) $(SUBPKGS)
 VERSION := $(shell cat VERSION)
 EXECUTABLE := moredis
